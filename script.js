@@ -12,6 +12,7 @@ const projection = d3.geoOrthographic()
   .clipAngle(90)
   .rotate([-80, -10]);
 
+
 const path = d3.geoPath().projection(projection).context(context);
 
 let countries, plotData = [];
@@ -20,9 +21,20 @@ let countries, plotData = [];
 function draw() {
   context.clearRect(0, 0, width, height);
 
-  // Draw countries
+  // Draw CO₂ points
+  if (plotData.length) {
+    plotData.forEach(d => {
+      const [x, y] = projection([d.lon, d.lat]);
+      if (x != null && y != null) {
+        context.fillStyle = colorScale(d.co2);
+        context.fillRect(x, y, 6, 6);
+      }
+    });
+  }
+
+    // Draw countries
   if (countries) {
-    context.fillStyle = "#aadaff";
+    context.fillStyle = "#ffffff04";
     context.strokeStyle = "#000";
     countries.features.forEach(f => {
       context.beginPath();
@@ -31,17 +43,7 @@ function draw() {
       context.stroke();
     });
   }
-
-  // Draw CO₂ points
-  if (plotData.length) {
-    plotData.forEach(d => {
-      const [x, y] = projection([d.lon, d.lat]);
-      if (x != null && y != null) {
-        context.fillStyle = colorScale(d.co2);
-        context.fillRect(x, y, 2, 2);
-      }
-    });
-  }
+  
 }
 const CO2_MIN = 0.0;
 const CO2_MID = 3.01215e-08;
@@ -104,4 +106,31 @@ d3.json("data/countries.json").then(world => {
     });
 });
 
+// Fade in the globe when the #scrolly section enters viewport
+const scrollyObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      canvas.classList.add("visible");
+    }
+  });
+}, { threshold: 0.1 });
+
+scrollyObserver.observe(document.getElementById("scrolly"));
+
+window.addEventListener("resize", () => {
+  // Update canvas size
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  canvas.width = width;
+  canvas.height = height;
+
+  const radius = Math.min(width, height) / 2.2;
+
+  // Update projection
+  projection
+    .scale(radius)
+    .translate([width / 2, height / 2]);
+
+  draw();  // redraw globe with new size
+});
 
