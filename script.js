@@ -178,7 +178,7 @@ function setProjection(scale, width, height) {
   projection = d3
     .geoOrthographic()
     .clipAngle(90)
-    .rotate([-80, -10])
+    .rotate([0, 0])
     .scale(scale)
     .translate([width / 2, height / 2]);
 
@@ -288,14 +288,23 @@ function resizeCanvas() {
   const width = rect.width;
   const height = rect.height;
 
-  canvas.width = width;
-  canvas.height = height;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const oldRotation = projection.rotate();
 
   targetScale = Math.min(width, height) / 2.2;
 
   setProjection(targetScale, width, height);
+  projection.rotate(oldRotation);
+
   draw();
 }
+
+
 
 function draw() {
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -414,6 +423,66 @@ function updateYear(csvFile) {
   });
 }
 
+const stepViews = {
+  "step-1850": { lon: 0, lat: 0 },
+  "step-1869": { lon: -20, lat: 10 },
+  "step-1930": { lon: 80, lat: 20 },
+  "step-1945": { lon: -120, lat: 30 },
+  "step-1952": { lon: -120, lat: 30 },
+  "step-2014": { lon: -120, lat: 30 }
+};
+
+
+let activeRotationTween = null;
+
+function animateGlobeTo(lon, lat, duration = 1600) {
+  if (activeRotationTween && activeRotationTween.cancel) {
+    activeRotationTween.cancel = true;
+  }
+
+  const startRotation = projection.rotate();
+  const endRotation = [-lon, -lat, startRotation[2]];
+  const interpolator = d3.interpolate(startRotation, endRotation);
+  const ease = d3.easeCubicInOut;
+  const startTime = performance.now();
+
+  const state = { cancel: false };
+  activeRotationTween = state;
+
+  function frame(now) {
+    if (state.cancel) return;
+    const t = Math.min((now - startTime) / duration, 1);
+    const k = ease(t);
+    projection.rotate(interpolator(k));
+    draw();
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+
+// const steps = document.querySelectorAll(".step");
+
+// const observer = new IntersectionObserver(
+//   entries => {
+//     entries.forEach(entry => {
+//       if (!entry.isIntersecting) return;
+//       const id = entry.target.id;
+//       const view = stepViews[id];
+//       if (!view) return;
+//       animateGlobeTo(view.lon, view.lat, 1600);
+//     });
+//   },
+//   {
+//     threshold: 0.6
+//   }
+// );
+
+// steps.forEach(step => observer.observe(step));
 
 
 function drawRegionChart(regionName, chartDiv, data, eventYear) {
@@ -496,47 +565,49 @@ d3.json("data/countries.json").then((world) => {
     updateYear(initialCsv);
   }
 
-  const scroller = scrollama();
-  scroller.setup({ step: ".step" }).onStepEnter(async ({ element }) => {
-    const stepType = element.dataset.stepType;
-    if (stepType === "landing") {
-      document.body.classList.add("cinematic-mode");
-
-      isEarthVisible = true;
-      resizeCanvas();
-      return;
-    }
-    if (stepType === "approach") {
-      document.body.classList.add("cinematic-mode");
-      isEarthVisible = true;
-      draw();
-      return;
-    }
-
-    document.body.classList.remove("cinematic-mode");
-    resizeCanvas();
+const scroller = scrollama();
+scroller.setup({ step: ".step" }).onStepEnter(async ({ element }) => {
+  const stepType = element.dataset.stepType;
+  if (stepType === "landing") {
+    document.body.classList.add("cinematic-mode");
     isEarthVisible = true;
+    resizeCanvas();
+    return;
+  }
+  if (stepType === "approach") {
+    document.body.classList.add("cinematic-mode");
+    isEarthVisible = true;
+    draw();
+    return;
+  }
 
-    warpTarget = 0;
-    warpFactor = 0;
-    starTargetAlpha = 0;
-    starGlobalAlpha = 0;
+  document.body.classList.remove("cinematic-mode");
+  isEarthVisible = true;
 
-    const globeFile = element.dataset.globeFile;
-    const chartFile = element.dataset.chartFile;
-    const region = element.dataset.region;
-    const year = +element.dataset.year;
+  warpTarget = 0;
+  warpFactor = 0;
+  starTargetAlpha = 0;
+  starGlobalAlpha = 0;
 
-    setProjection(targetScale, canvas.width, canvas.height);
+  const id = element.id;
+  const view = stepViews[id];
+  if (view) {
+    animateGlobeTo(view.lon, view.lat, 1600);
+  }
 
-    updateYear(globeFile);
+  const globeFile = element.dataset.globeFile;
+  const chartFile = element.dataset.chartFile;
+  const region = element.dataset.region;
+  const year = +element.dataset.year;
 
+  updateYear(globeFile);
 
-    const chartData = await d3.csv(chartFile);
-    const block = element.closest(".step-block");
-    const chartDiv = block.querySelector(".chart");
-    drawRegionChart(region, chartDiv, chartData, year);
-  });
+  const chartData = await d3.csv(chartFile);
+  const block = element.closest(".step-block");
+  const chartDiv = block.querySelector(".chart");
+  drawRegionChart(region, chartDiv, chartData, year);
+});
+
 });
 
 const intro = document.querySelector(".intro");
