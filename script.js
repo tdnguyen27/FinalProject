@@ -220,8 +220,8 @@ function initBarChartRace() {
   if (raceInitialized) return;     // don't re-initialize
   raceInitialized = true;
 
-  const ANIM_DURATION = 450;   // ms for transitions
-  const STEP_INTERVAL = 500;   // ms between years; slightly larger than duration
+  const ANIM_DURATION = 200;   // ms for transitions
+  const STEP_INTERVAL = 220;   // ms between years; slightly larger than duration
 
   // 1. Get size of the inner panel after it's expanded
   const margin = { top: 20, right: 40, bottom: 30, left: 120 };
@@ -313,14 +313,18 @@ function initBarChartRace() {
       const bars = raceSvg.selectAll("rect.bar")
         .data(yearData, d => d.region); // key = region
 
-      const barsEnter = bars.enter()
+      const barsEnter = bars
+        .enter()
         .append("rect")
         .attr("class", "bar")
         .attr("x", 0)
-        .attr("y", d => raceY(d.region))
+        .attr("y", (d) => raceY(d.region))
         .attr("height", raceY.bandwidth())
-        .attr("width", 0)  // start collapsed
-        .attr("fill", d => raceColor(d.region));
+        .attr("width", 0) // start collapsed
+        .attr("rx", 3) // <-- add
+        .attr("ry", 3) // <-- add
+        .attr("fill", (d) => raceColor(d.region));
+
 
       barsEnter.merge(bars)
         .transition()
