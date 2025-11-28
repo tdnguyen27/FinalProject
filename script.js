@@ -499,18 +499,18 @@ window.addEventListener(
 );
 
 
-
 function resizeCanvas() {
   const rect = container.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
 
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
+  // Make the canvas’s *intrinsic* size match its CSS box
+  canvas.style.width = width + "px";
+  canvas.style.height = height + "px";
+  canvas.width = width;
+  canvas.height = height;
 
-  context.setTransform(dpr, 0, 0, dpr, 0, 0);
-
+  // Preserve current rotation
   const oldRotation = projection.rotate();
 
   targetScale = Math.min(width, height) / 2.2;
@@ -520,8 +520,6 @@ function resizeCanvas() {
 
   draw();
 }
-
-
 
 function draw() {
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -680,26 +678,6 @@ function animateGlobeTo(lon, lat, duration = 1600) {
 
   requestAnimationFrame(frame);
 }
-
-
-// const steps = document.querySelectorAll(".step");
-
-// const observer = new IntersectionObserver(
-//   entries => {
-//     entries.forEach(entry => {
-//       if (!entry.isIntersecting) return;
-//       const id = entry.target.id;
-//       const view = stepViews[id];
-//       if (!view) return;
-//       animateGlobeTo(view.lon, view.lat, 1600);
-//     });
-//   },
-//   {
-//     threshold: 0.6
-//   }
-// );
-
-// steps.forEach(step => observer.observe(step));
 
 
 function drawRegionChart(regionName, chartDiv, data, eventYear) {

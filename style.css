@@ -195,6 +195,9 @@ body {
   height: 100vh;
   position: sticky;
   top: 0;
+  display: flex;              /* center the canvas inside */
+  align-items: center;
+  justify-content: center;
 }
 
 .left-panel canvas {
