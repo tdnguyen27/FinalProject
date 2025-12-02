@@ -7,7 +7,7 @@ let spaceWidth = window.innerWidth;
 let spaceHeight = window.innerHeight;
 let scrollTimeout = null;
 let userIsScrolling = false;
-
+let isStoryActive = false; 
 let hasExitedIntro = false;
 
 let stars = [];
@@ -27,8 +27,23 @@ let hasWarped = false;
 let activeRegionLabel = "";
 
 const globeCache = {};
+const stepColorDomains = {};
+let dotTransitionAnimating = false;
+let dotTransition = 1;
 
+let countries;
+let plotData = [];
+let targetScale = 250;
 
+let isEarthVisible = true;
+let isInStory = false;
+let isWarping = false;
+let isZooming = false;
+let dotAlpha = 1.0;
+let starsInitialized = false;
+
+let currentYearMode = "event"; // "event" or "after"
+let currentStepElement = null; 
 
 function resizeSpaceCanvas() {
   spaceWidth = window.innerWidth;
@@ -69,30 +84,34 @@ function renderSpace(timestamp) {
   const deltaTime = (timestamp - lastTime) / 16.66;
   lastTime = timestamp;
 
-  const inStorySteps =
-    isInStory && !document.body.classList.contains("cinematic-mode");
+  const inStorySteps = isStoryActive;
 
-  if (inStorySteps) {
-    warpFactor = 0;
+  if (!isInStory) {
+    // INTRO MODE
+    warpTarget = WARP_IDLE;
+    starTargetAlpha = 1;
+  } else if (isWarping) {
+    // WARP MODE
+    // do nothing — warpTarget already controlled by enterStory()
+  } else {
+    // STORY MODE
     warpTarget = 0;
-    starGlobalAlpha = 0;
     starTargetAlpha = 0;
+  }
 
-    // FIX: Draw the dark background instead of clearing it to transparency
-    spaceCtx.fillStyle = "#020617";
-    spaceCtx.fillRect(0, 0, spaceWidth, spaceHeight);
-
-    requestAnimationFrame(renderSpace);
-    return;
-}
-
-  spaceCtx.fillStyle = "rgba(2, 6, 23, 0.9)";
-  spaceCtx.fillRect(0, 0, spaceWidth, spaceHeight);
+spaceCtx.fillStyle = "rgba(2,6,23,0.9)";
+spaceCtx.fillRect(0, 0, spaceWidth, spaceHeight);
 
   warpFactor += (warpTarget - warpFactor) * 0.1 * deltaTime;
   starGlobalAlpha += (starTargetAlpha - starGlobalAlpha) * 0.08 * deltaTime;
 
   warpHuePhase += warpFactor * 0.12 * deltaTime;
+
+  if (isInStory && !isWarping) {
+    spaceCtx.fillStyle = "rgba(2, 6, 35, 1)";
+    spaceCtx.fillRect(0, 0, spaceWidth, spaceHeight);
+    return;
+  }
 
   for (const star of stars) {
     star.x += star.vx * star.speed * warpFactor * deltaTime;
@@ -195,16 +214,6 @@ let projection = d3.geoOrthographic().clipAngle(90).rotate([-80, -10]);
 let path = d3.geoPath().projection(projection).context(context);
 const sphere = { type: "Sphere" };
 const graticule = d3.geoGraticule10();
-
-let countries;
-let plotData = [];
-let targetScale = 250;
-
-let isEarthVisible = true;
-let isInStory = false;
-let isWarping = false;
-let isZooming = false;
-let dotAlpha = 1.0;
 
 let scrollLocked = false;
 let absorbNextScroll = false;
@@ -516,6 +525,7 @@ function lockScroll() {
   window.addEventListener("keydown", preventScrollKeys, { passive: false });
 }
 
+
 function unlockScroll() {
   scrollLocked = false;
   absorbNextScroll = true;
@@ -551,11 +561,15 @@ function resizeCanvas() {
 
   targetScale = Math.min(width, height) / 2.2;
 
-  setProjection(targetScale, width, height);
+  // FIXED globe size – no per-step zoom multiplier
+  const zoomMult = currentStepZoomMultiplier || 1;
+  setProjection(targetScale * zoomMult, width, height);
   projection.rotate(oldRotation);
 
   draw();
 }
+
+
 
 function draw() {
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -604,7 +618,7 @@ function draw() {
     return;
   }
 
-  if (plotData.length && isEarthVisible) {
+  if (!isZooming && plotData.length && isEarthVisible) {
     const t = projection.translate();
     const cx = t[0];
     const cy = t[1];
@@ -644,8 +658,15 @@ function draw() {
       if (dx * dx + dy * dy > r * r) return;
 
       const intensity = Math.min(1, d.co2 / maxVal);
-      const radius = 1.4 + intensity * 1.7;
-      const alpha = 0.25 + intensity * 0.75;
+      const baseRadius = 1.4 + intensity * 1.7;
+
+      const w = d.weight != null ? d.weight : 1;
+
+      // Dot transition: they "shrink" + fade during toggle
+      const motionScale = 0.85 + 0.15 * dotTransition;
+      const radius = baseRadius * motionScale * (0.7 + 0.3 * w);
+
+      const alpha = (0.25 + intensity * 0.75) * dotTransition * w; // fade out near region edge & during transitions
 
       const jitterX = (Math.random() - 0.5) * 1.2;
       const jitterY = (Math.random() - 0.5) * 1.2;
@@ -688,21 +709,58 @@ function draw() {
         context.fill();
 
         context.restore();
-
-        if (activeRegionLabel) {
-          const labelX = fx;
-          const labelY = fy + 8;
-
+  
+        // Only show label once rotation tween is finished
+        if (activeRegionLabel && !activeRotationTween) {
           context.save();
-          context.font = "500 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+          context.font =
+            "500 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
           context.textAlign = "center";
           context.textBaseline = "middle";
-          context.shadowColor = "rgba(0,0,0,0.7)";
-          context.shadowBlur = 3;
+          context.shadowColor = "rgba(15, 23, 42, 0.85)";
+          context.shadowBlur = 6;
+          context.fillStyle = "#e5e7eb";
 
-          context.lineTo(labelX - 6, labelY);
-          context.fillStyle = "rgba(226, 232, 240, 0.92)";
-          context.fillText(activeRegionLabel, labelX, labelY);
+          if (activeRegionLabel === "Africa") {
+            // AFRICA: label right in the middle, no line
+            const labelX = fx;
+            const labelY = fy;
+            context.fillText(activeRegionLabel, labelX, labelY);
+          } else {
+            // Everyone else: offset label + leader line
+
+            // vector from globe center → region center
+            const vx = fx - cx;
+            const vy = fy - cy;
+            const dist = Math.sqrt(vx * vx + vy * vy);
+
+            // how far to push the label away from the region
+            const offset = r * 0.22; // tweak if needed
+
+            let labelX, labelY;
+
+            if (dist < r * 0.05) {
+              // if the focus is basically at the center, shove label to the right
+              labelX = fx + offset;
+              labelY = fy;
+            } else {
+              const ux = vx / (dist || 1);
+              const uy = vy / (dist || 1);
+              labelX = fx + ux * offset;
+              labelY = fy + uy * offset;
+            }
+
+            // leader line
+            context.beginPath();
+            context.moveTo(fx, fy);
+            context.lineTo(labelX, labelY);
+            context.strokeStyle = "rgba(148, 163, 184, 0.85)";
+            context.lineWidth = 0.8;
+            context.stroke();
+
+            // text
+            context.fillText(activeRegionLabel, labelX, labelY);
+          }
 
           context.restore();
         }
@@ -713,7 +771,7 @@ function draw() {
 
 
 
-if (countries) {
+if (!isZooming && countries) {
   context.beginPath();
   context.strokeStyle = "rgba(148, 163, 184, 0.25)";
   context.lineWidth = 0.4;
@@ -728,10 +786,9 @@ if (countries) {
   path(countries);
   context.fill();
   context.stroke();
-}
+}}
 
 
-}
 
 window.addEventListener("resize", resizeCanvas);
 const CO2_MIN = 0;
@@ -745,40 +802,121 @@ let focusLat = null;
 
 let colorScale = d3
   .scaleLinear()
-  .range(["#020b1f", "#38bdf8", "#f97316"])
+  .range(["#020617", "#38bdf8", "#f97316"])
   .clamp(true);
 
+function regionWeight(p) {
+  // // Outside story view, just draw everything fully
+  // if (!isInStory || focusLon == null || focusLat == null) return 1;
+
+  // // 1) Hard mask by rough region bounds if we have them
+  // if (currentStepElement) {
+  //   const mask = regionMaskByStep[currentStepElement.id];
+  //   if (mask) {
+  //     if (
+  //       p.lat < mask.latMin ||
+  //       p.lat > mask.latMax ||
+  //       p.lon < mask.lonMin ||
+  //       p.lon > mask.lonMax
+  //     ) {
+  //       return 0; // completely ignore this grid cell
+  //     }
+  //   }
+  // }
+
+  // // 2) Soft radial falloff inside that mask
+  // let radius = 38;
+  // if (currentStepElement && regionRadiusByStep[currentStepElement.id]) {
+  //   radius = regionRadiusByStep[currentStepElement.id];
+  // }
+
+  // const dLat = p.lat - focusLat;
+
+  // let dLon = p.lon - focusLon;
+  // if (dLon > 180) dLon -= 360;
+  // if (dLon < -180) dLon += 360;
+
+  // const latRad = (focusLat * Math.PI) / 180;
+  // const lonScale = Math.cos(latRad || 0);
+
+  // const dist = Math.sqrt(dLat * dLat + dLon * lonScale * (dLon * lonScale));
+
+  // const inner = radius * 0.75;
+  // const outer = radius * 1.15;
+
+  // if (dist <= inner) return 1;
+  // if (dist >= outer) return 0;
+
+  // const t = (dist - inner) / (outer - inner);
+  // return Math.max(0, 1 - t);
+  return 1;
+}
 
 function updateYear(csvFile) {
   function applyGlobeData(data) {
-    const yearData = data.map((d) => ({
-      lat: +d.lat,
-      lon: +d.lon,
-      co2: +d.fco2antt,
-    }));
+    // 1) Map raw rows to objects with region weights
+    const yearData = data.map((d) => {
+      const obj = {
+        lat: +d.lat,
+        lon: +d.lon,
+        co2: +d.fco2antt,
+      };
+      obj.weight = regionWeight(obj);
+      return obj;
+    });
 
-    const landValues = yearData
-      .filter((d) => d.co2 > 0)
-      .map((d) => d.co2)
-      .sort(d3.ascending);
+    // 2) Choose color scale: fixed per-step if available,
+    // otherwise fall back to per-year scaling
+    const stepId = currentStepElement ? currentStepElement.id : null;
+    const fixedDomain =
+      stepId && stepColorDomains[stepId] ? stepColorDomains[stepId] : null;
 
-    if (landValues.length) {
-      const q90 = d3.quantile(landValues, 0.9);
-      const q99 = d3.quantile(landValues, 0.99);
-      colorScale.domain([0, q90, q99]);
+    if (fixedDomain) {
+      // Use the shared domain for this step (event +10y)
+      colorScale.domain(fixedDomain);
+    } else {
+      // Old behavior: compute from this year's regional data
+      let scaleSample = yearData.filter((d) => d.co2 > 0 && d.weight > 0.2);
+
+      if (!scaleSample.length) {
+        // Fallback: use all positive values if something went weird
+        scaleSample = yearData.filter((d) => d.co2 > 0);
+      }
+
+      const landValues = scaleSample.map((d) => d.co2).sort(d3.ascending);
+
+      if (landValues.length) {
+        const q80 = d3.quantile(landValues, 0.8);
+        const q95 = d3.quantile(landValues, 0.95);
+        colorScale.domain([0, q80, q95]);
+      }
     }
 
+    // 3) Only keep points with some visible weight
+    let drawSource = yearData.filter((d) => d.weight > 0.01);
+
     const binnedData = d3.rollup(
-      yearData,
-      (v) => d3.mean(v, (d) => d.co2),
+      drawSource,
+      (v) => ({
+        co2: d3.mean(v, (d) => d.co2),
+        weight: d3.mean(v, (d) => d.weight),
+      }),
       (d) => Math.round(d.lat),
       (d) => Math.round(d.lon)
     );
 
     plotData = [];
     binnedData.forEach((lons, lat) => {
-      lons.forEach((co2, lon) => {
-        plotData.push({ lat: +lat, lon: +lon, co2 });
+      lons.forEach((val, lon) => {
+        plotData.push({
+          lat: +lat,
+          lon: +lon,
+          co2: val.co2,
+          weight: val.weight,
+          // precompute a tiny jitter once so we don't call Math.random in draw()
+          jitterX: (Math.random() - 0.5) * 1.2,
+          jitterY: (Math.random() - 0.5) * 1.2,
+        });
       });
     });
 
@@ -800,16 +938,270 @@ function updateYear(csvFile) {
       console.error("Error loading CSV", csvFile, err);
     });
 }
+function animateDotTransition(onMidpoint) {
+  if (dotTransitionAnimating) {
+    // If a transition is in progress, just call the mid-callback immediately
+    if (onMidpoint) onMidpoint();
+    return;
+  }
+
+  dotTransitionAnimating = true;
+  const duration = 520;
+  const start = performance.now();
+  let midCalled = false;
+
+  function frame(now) {
+    const t = Math.min((now - start) / duration, 1);
+
+    if (t < 0.5) {
+      // fade/shrink out
+      dotTransition = 1 - t * 2;
+    } else {
+      // fade/shrink in
+      dotTransition = (t - 0.5) * 2;
+
+      if (!midCalled && onMidpoint) {
+        midCalled = true;
+        onMidpoint();
+      }
+    }
+
+    draw();
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      dotTransitionAnimating = false;
+      dotTransition = 1;
+      draw();
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+
+function getGlobeFileForStep(stepEl) {
+  if (!stepEl) return null;
+
+  const base = stepEl.dataset.globeFile;
+  const after = stepEl.dataset.globeFileAfter;
+
+  if (currentYearMode === "after" && after) {
+    return after;
+  }
+  return base || null;
+}
+async function ensureStepColorDomain(stepEl) {
+  if (!stepEl) return null;
+
+  const stepId = stepEl.id || stepEl.dataset.stepId;
+  if (!stepId) return null;
+
+  // If we've already computed it, reuse
+  if (stepColorDomains[stepId]) {
+    return stepColorDomains[stepId];
+  }
+
+  const baseFile = stepEl.dataset.globeFile;
+  const afterFile = stepEl.dataset.globeFileAfter;
+  const files = [baseFile, afterFile].filter(Boolean);
+
+  // If there's no data at all, nothing to do
+  if (!files.length) return null;
+
+  // Load all the files (using globeCache if available)
+  const datasets = await Promise.all(
+    files.map((file) => {
+      if (globeCache[file]) return Promise.resolve(globeCache[file]);
+      return d3.csv(file).then((data) => {
+        globeCache[file] = data;
+        return data;
+      });
+    })
+  );
+
+  // Collect regional values across BOTH years
+  let values = [];
+
+  datasets.forEach((data) => {
+    data.forEach((d) => {
+      const obj = {
+        lat: +d.lat,
+        lon: +d.lon,
+        co2: +d.fco2antt,
+      };
+      obj.weight = regionWeight(obj);
+
+      // Only sample inside the focused region
+      if (obj.co2 > 0 && obj.weight > 0.2) {
+        values.push(obj.co2);
+      }
+    });
+  });
+
+  // Fallback: if something went weird with weights, use all positive values
+  if (!values.length) {
+    datasets.forEach((data) => {
+      data.forEach((d) => {
+        const co2 = +d.fco2antt;
+        if (co2 > 0) values.push(co2);
+      });
+    });
+  }
+
+  if (!values.length) return null;
+
+  values.sort(d3.ascending);
+  const q85 = d3.quantile(values, 0.85);
+  const q90 = d3.quantile(values, 0.95);
+  const domain = [0, q85, q90];
+
+  stepColorDomains[stepId] = domain;
+  return domain;
+}
+
 
 
 const stepViews = {
+  // Africa – same
   "step-1880": { lon: 18, lat: 2 },
-  "step-1908": { lon: 42, lat: 27 },
+
+  // Middle East – move the focus north-east to where the emissions band actually is
+  // (around northern Iran / Caspian / Iraq–Turkey area)
+  "step-1908": { lon: 45, lat: 35 },
+
+  // Belgium – same
   "step-1930": { lon: 5, lat: 50 },
-  "step-1945": { lon: 138, lat: 36 },
-  "step-1952": { lon: -0, lat: 51 },
-  "step-1955": {lon: 108, lat: 14},
+
+  // Japan – nudge slightly north so the halo hugs the main islands
+  "step-1945": { lon: 138, lat: 38 },
+
+  // UK – move a bit west/north so it covers the whole island group
+  "step-1952": { lon: -2, lat: 54 },
+
+  // Vietnam – shift slightly north
+  "step-1955": { lon: 107, lat: 16 },
+
+  // 2014 Africa context
   "step-2014": { lon: 18, lat: 2 },
+};
+
+const stepZoomByStep = {
+  "step-1880": 1.15, // Africa – mild zoom
+  "step-1908": 1.6, // Middle East – tighter region
+  "step-1930": 1.8, // Belgium (if re-enabled)
+  "step-1945": 1.8, // Japan
+  "step-1952": 1.8, // UK
+  "step-1955": 1.8, // Vietnam
+  "step-2014": 1.15, // 2014 Africa context (if used)
+};
+
+let currentStepZoomMultiplier = 1;
+
+const regionMaskByStep = {
+  // Africa – wide, since it's a whole continent
+  "step-1880": {
+    latMin: -35,
+    latMax: 20,
+    lonMin: -20,
+    lonMax: 50,
+  },
+
+  // Middle East – avoid most of Europe & N. Africa
+  "step-1908": {
+    latMin: 15,
+    latMax: 40,
+    lonMin: 30,
+    lonMax: 65,
+  },
+
+  // Belgium – small patch in Western Europe
+  "step-1930": {
+    latMin: 46,
+    latMax: 56,
+    lonMin: -2,
+    lonMax: 10,
+  },
+
+  // Japan – try to exclude Korea / China
+  "step-1945": {
+    latMin: 28,
+    latMax: 46,
+    lonMin: 130,
+    lonMax: 147,
+  },
+
+  // United Kingdom – just the islands
+  "step-1952": {
+    latMin: 48,
+    latMax: 60,
+    lonMin: -11,
+    lonMax: 4,
+  },
+
+  // Vietnam – tighter around Vietnam itself
+  "step-1955": {
+    latMin: 8,
+    latMax: 24,
+    lonMin: 102,
+    lonMax: 110,
+  },
+
+  // 2014 Africa context – same as Africa bounds
+  "step-2014": {
+    latMin: -35,
+    latMax: 20,
+    lonMin: -20,
+    lonMax: 50,
+  },
+};
+
+
+const regionRadiusByStep = {
+  "step-1880": 40, // Africa – keep wide (whole continent)
+
+  // Middle East – narrower so we don’t grab as much of Europe / N. Africa
+  "step-1908": 20,
+
+  "step-1930": 12, // Belgium – slightly smaller
+
+  // Japan – smaller so we don’t include mainland Asia
+  "step-1945": 10,
+
+  // UK – a bit smaller but still enough to cover the islands
+  "step-1952": 10,
+
+  // Vietnam – much tighter so it doesn’t pull in half of SE Asia
+  "step-1955": 10,
+
+  "step-2014": 40, // Africa context
+};
+const regionCountriesByStep = {
+  // Middle East oil story
+  "step-1908": [
+    "Iran",
+    "Iraq",
+    "Saudi Arabia",
+    "Kuwait",
+    "United Arab Emirates",
+    "Qatar",
+    "Bahrain",
+    "Oman",
+    "Syria",
+    "Jordan",
+    "Israel",
+    "Lebanon",
+  ],
+
+  // Japan nuclear/testing story
+  "step-1945": ["Japan"],
+
+  // UK smog story
+  "step-1952": ["United Kingdom", "Ireland"],
+
+  // Vietnam war story
+  "step-1955": ["Vietnam"],
 };
 
 let activeRotationTween = null;
@@ -821,7 +1213,8 @@ function animateGlobeTo(lon, lat, duration = 1600) {
 
   const startRotation = projection.rotate();
   const endRotation = [-lon, -lat, startRotation[2]];
-  const interpolator = d3.interpolate(startRotation, endRotation);
+
+  const rotInterp = d3.interpolate(startRotation, endRotation);
   const ease = d3.easeCubicInOut;
   const startTime = performance.now();
 
@@ -832,16 +1225,23 @@ function animateGlobeTo(lon, lat, duration = 1600) {
     if (state.cancel) return;
     const t = Math.min((now - startTime) / duration, 1);
     const k = ease(t);
-    projection.rotate(interpolator(k));
+
+    projection.rotate(rotInterp(k));
     draw();
 
     if (t < 1) {
       requestAnimationFrame(frame);
+    } else {
+      // tween is finished – allow label to appear
+      activeRotationTween = null;
+      draw();
     }
   }
 
   requestAnimationFrame(frame);
 }
+
+
 
 function drawRegionChart(regionName, chartDiv, data, eventYear) {
   chartDiv.innerHTML = "";
@@ -914,14 +1314,11 @@ function drawRegionChart(regionName, chartDiv, data, eventYear) {
 
 d3.json("data/countries.json").then((world) => {
   countries = topojson.feature(world, world.objects.countries);
+  
   resizeCanvas();
   draw();
 
-  const firstDataStep = document.querySelector(".step[data-globe-file]");
-  if (firstDataStep) {
-    const initialCsv = firstDataStep.dataset.globeFile;
-    updateYear(initialCsv);
-  }
+  updateYear("data/1850_co.csv");
 
   const scroller = scrollama();
 
@@ -931,70 +1328,73 @@ d3.json("data/countries.json").then((world) => {
       offset: 0.2,
     })
     .onStepEnter(async ({ element }) => {
-      if (!hasStartedStory) return;
+        if (!isInStory || isWarping || isZooming) {
+          return;
+        }
+        const block = element.closest(".step-block");
+        document.querySelectorAll(".step-block").forEach((b) => {
+          b.classList.remove("is-active");
+        });
+        if (block) block.classList.add("is-active");
 
-      focusLon = null;
-      focusLat = null;
+        collapseRacePanel();
+        hideIntroCards();
+        document.body.classList.remove("cinematic-mode");
 
-      const stepType = element.dataset.stepType;
+        if (!isWarping && !isZooming) {
+          resizeCanvas();
+        }
 
-      if (stepType === "landing") {
-        document.body.classList.add("cinematic-mode");
         isEarthVisible = true;
-        resizeCanvas();
-        return;
-      }
 
-      if (stepType === "approach") {
-        document.body.classList.add("cinematic-mode");
-        isEarthVisible = true;
-        draw();
-        return;
-      }
+        const id = element.id;
+        const view = stepViews[id];
+        if (view) {
+          // Rotate to center this region, but keep globe size fixed
+          animateGlobeTo(view.lon, view.lat, 1600);
 
-      const block = element.closest(".step-block");
-      document.querySelectorAll(".step-block").forEach((b) => {
-        b.classList.remove("is-active");
-      });
-      if (block) block.classList.add("is-active");
-
-      collapseRacePanel();
-      hideIntroCards();
-      document.body.classList.remove("cinematic-mode");
-
-      resizeCanvas();
-
-      isEarthVisible = true;
-
-      warpTarget = 0;
-      warpFactor = 0;
-      starTargetAlpha = 0;
-      starGlobalAlpha = 0;
-
-      const id = element.id;
-      const view = stepViews[id];
-      if (view) {
-        animateGlobeTo(view.lon, view.lat, 1600);
-        focusLon = view.lon;
-        focusLat = view.lat;
-        activeRegionLabel = element.dataset.region || "";
-      }
+          focusLon = view.lon;
+          focusLat = view.lat;
+          activeRegionLabel = element.dataset.region || "";
+        }
 
 
-      const globeFile = element.dataset.globeFile;
-      const chartFile = element.dataset.chartFile;
-      const region = element.dataset.region;
-      const year = +element.dataset.year;
+        // Track active step for the toggle
+        currentStepElement = element;
 
-      if (globeFile) {
-        updateYear(globeFile);
-      }
+        // Show or hide year toggle depending on whether this step has an "after" file
+        if (yearToggleEl) {
+          if (element.dataset.globeFileAfter) {
+            yearToggleEl.classList.add("visible");
+          } else {
+            yearToggleEl.classList.remove("visible");
+            // Reset mode to event when we enter a step with no +10y data (like 2014)
+            currentYearMode = "event";
+            yearToggleButtons.forEach((btn) => {
+              btn.classList.toggle("active", btn.dataset.mode === "event");
+            });
+          }
+        }
 
-      if (chartFile && region) {
-        const chartData = await d3.csv(chartFile);
-        const chartDiv = block.querySelector(".chart");
-        drawRegionChart(region, chartDiv, chartData, year);
-      }
+        // Ensure the shared color domain (event +10y) is computed for this step
+        await ensureStepColorDomain(element);
+
+        // Pick appropriate file based on current mode
+        const globeFile = getGlobeFileForStep(element);
+        const chartFile = element.dataset.chartFile;
+        const region = element.dataset.region;
+        const year = +element.dataset.year;
+
+        if (globeFile) {
+          updateYear(globeFile);
+        }
+
+
+        if (chartFile && region) {
+          const chartData = await d3.csv(chartFile);
+          const chartDiv = block.querySelector(".chart");
+          drawRegionChart(region, chartDiv, chartData, year);
+        }
     });
 });
 const intro = document.querySelector(".intro");
@@ -1037,19 +1437,20 @@ function enterStory() {
 
   intro.classList.add("slide-up");
 
-  isEarthVisible = false;
-  draw();
-
+  // keep Earth visible through warp + zoom
+  isEarthVisible = true;
   document.body.classList.add("cinematic-mode");
-  resizeCanvas();
+  draw();
 
   const scrollyTop = scrolly.offsetTop;
   window.scrollTo({
     top: scrollyTop,
     behavior: "auto",
   });
-
-  initStars();
+  if (!starsInitialized) {
+    initStars();
+    starsInitialized = true;
+  }
 
   warpFactor = WARP_IDLE;
   starGlobalAlpha = 1;
@@ -1061,14 +1462,14 @@ function enterStory() {
   const ZOOM_DURATION = 1200;
 
   warpTimeout = setTimeout(() => {
-    warpTarget = WARP_CRUISE;
+    setTimeout(() => {
+      isStoryActive = true;
+    }, 200);
 
     slowTimeout = setTimeout(() => {
       warpTarget = 0.05;
       starTargetAlpha = 0.3;
 
-      scrolly.classList.add("visible");
-      isEarthVisible = true;
       dotAlpha = 0;
       isZooming = true;
 
@@ -1093,8 +1494,12 @@ function enterStory() {
           isEarthVisible = true;
           draw();
 
+          scrolly.classList.add("visible");
+
           warpTarget = WARP_IDLE;
-          isWarping = false;
+          setTimeout(() => {
+            isWarping = false;
+          }, 400);
 
           starTargetAlpha = 0;
 
@@ -1153,9 +1558,7 @@ if (proceedBtn) {
       introCardsEl.style.display = "none";
     }
 
-    const firstStepBlock = document.querySelector(
-      ".step-block:not(.ghost-step)"
-    );
+    const firstStepBlock = document.querySelector(".step-block");
     if (firstStepBlock) {
       const rect = firstStepBlock.getBoundingClientRect();
       const offset = window.innerHeight * 0.2;
@@ -1169,15 +1572,66 @@ if (proceedBtn) {
   });
 }
 
+const yearToggleEl = document.getElementById("year-toggle");
+const yearToggleButtons = yearToggleEl
+  ? yearToggleEl.querySelectorAll(".year-toggle-option")
+  : [];
+if (yearToggleEl) {
+  yearToggleEl.classList.remove("visible"); // make sure it starts hidden
+}
+
+function setYearMode(mode) {
+  if (!yearToggleEl) return;
+  if (mode !== "event" && mode !== "after") return;
+  if (mode === currentYearMode) return;
+
+  currentYearMode = mode;
+
+  yearToggleButtons.forEach((btn) => {
+    const btnMode = btn.dataset.mode;
+    btn.classList.toggle("active", btnMode === currentYearMode);
+  });
+
+  // Trigger glow pulse animation on the toggle container
+  yearToggleEl.classList.remove("glow-pulse");
+  // force reflow so animation can restart
+  void yearToggleEl.offsetWidth;
+  yearToggleEl.classList.add("glow-pulse");
+
+  // Re-load globe for the current active step if any, with dot transition
+  if (currentStepElement) {
+    const file = getGlobeFileForStep(currentStepElement);
+    if (file) {
+      animateDotTransition(() => updateYear(file));
+    }
+  }
+}
+
+
+if (yearToggleButtons.length) {
+  yearToggleButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode;
+      setYearMode(mode);
+    });
+  });
+}
 const conclusionBtn = document.getElementById("conclusion-btn");
 const conclusionSection = document.getElementById("conclusion");
-
 if (conclusionBtn && conclusionSection) {
   conclusionBtn.addEventListener("click", () => {
-    // reveal the conclusion section
+    // 1) Hide the Event / +10 Years toggle in conclusion
+    if (yearToggleEl) {
+      yearToggleEl.classList.remove("visible");
+      currentYearMode = "event";
+      yearToggleButtons.forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.mode === "event");
+      });
+    }
+
+    // 2) Reveal the conclusion section
     conclusionSection.classList.remove("hidden-outro");
 
-    // lazy-init globe once it's visible
     if (!conclusionInitialized) {
       initConclusionGlobe();
     } else {
@@ -1185,13 +1639,24 @@ if (conclusionBtn && conclusionSection) {
       drawConclusionGlobe();
     }
 
-    // scroll to it
+    // 3) Hide the scrolly section so user can't go back to events
+    const scrollyEl = document.getElementById("scrolly");
+    if (scrollyEl) {
+      scrollyEl.style.display = "none";
+    }
+
+    // 4) Make sure cinematic-mode is off
+    document.body.classList.remove("cinematic-mode");
+
+    // 5) Scroll to the conclusion section
     conclusionSection.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
   });
 }
+
+
 
 lockScroll();
 window.scrollTo(0, 0);
@@ -1260,9 +1725,9 @@ function applyConclusionData(data) {
     .sort(d3.ascending);
 
   if (landValues.length) {
-    const q90 = d3.quantile(landValues, 0.9);
-    const q99 = d3.quantile(landValues, 0.99);
-    conclusionColorScale.domain([0, q90, q99]);
+    const q80 = d3.quantile(landValues, 0.80);
+    const q95 = d3.quantile(landValues, 0.99);
+    conclusionColorScale.domain([0, q80, q95]);
   }
 
   const binnedData = d3.rollup(

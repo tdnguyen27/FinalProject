@@ -12,6 +12,15 @@
 </head>
 <body>
     <canvas id="space-bg"></canvas>
+
+    <div id="year-toggle" class="year-toggle">
+      <button class="year-toggle-option active" data-mode="event">
+        Event Year
+      </button>
+      <button class="year-toggle-option" data-mode="after">
+        +5 Years
+      </button>
+    </div>
     <div class = "intro">
     <span class="intro-label">Global CO₂ emissions · 1850–2014</span>
     <h1>
@@ -63,9 +72,9 @@
       </div>
 
       <div id="intro-panel-right" class="intro-card intro-card-right">
-        <h3>Before we dive into history…</h3>
+        <h3>A World in the Dark</h3>
         <p class="intro-card-body">
-          Lorem Ipsum Dolor Sit Amet, Consectetur Adipiscing Elit, Sed Do Eiusmod Tempor
+          The era of emissions has only just begun. The map remains mostly dark, except for a few industrial pioneers. These are the early sparks of a trend that will define the coming centuries.
         </p>
       </div>
       <div id="intro-cards">
@@ -76,12 +85,8 @@
 
   <!-- You can put steps ANYWHERE below (center, right, stacked, etc.) -->
   <div class="content-area">
-    <div class="step-block ghost-step">
-        <div class="step" data-step-type="landing"></div>
-    </div>
-
     <div class="step-block">
-        <div class="step" id="step-1880" data-globe-file="data/1880_co.csv" data-chart-file="data/regions_co2.csv" data-region="Africa" data-year = "1880">Year 1880</div>
+        <div class="step" id="step-1880" data-globe-file="data/1880_co.csv" data-globe-file-after="data/1880_co_after.csv" data-chart-file="data/regions_co2.csv" data-region="Africa" data-year = "1880">Year 1880</div>
         <div class="chart" id="chart-1880"></div>
         <div class="textbox">
           <!-- maybe add a rotation to the US and to center of europe -->
@@ -99,7 +104,7 @@
     </div>
 
     <div class="step-block">
-        <div class="step" id="step-1908" data-globe-file="data/1908_co.csv" data-chart-file="data/regions_co2.csv" data-region="Middle East" data-year = "1908">Year 1908</div>
+        <div class="step" id="step-1908" data-globe-file="data/1908_co.csv" data-globe-file-after="data/1908_co_after.csv" data-chart-file="data/regions_co2.csv" data-region="Middle East" data-year = "1908">Year 1908</div>
         <div class="chart" id="chart-1908"></div>
         <div class="textbox">
             <p>In the early 20th century British prospectors discovered oil in Iran and began 
@@ -116,17 +121,17 @@
               didn’t acknowledge their key involvement until 2013. </p>
         </div>
     </div>
-
+<!--
     <div class="step-block">
-        <div class="step" id="step-1930" data-globe-file="data/1930_co.csv" data-chart-file="data/regions_co2.csv" data-region="Belgium" data-year = "1930">Year 1930</div>
+        <div class="step" id="step-1930" data-globe-file="data/1930_co.csv" data-globe-file-after="data/1930_co_after.csv" data-chart-file="data/regions_co2.csv" data-region="Belgium" data-year = "1930">Year 1930</div>
         <div class="chart" id="chart-1930"></div>
         <div class="textbox">
             <p>Smog Disaster in the Meuse Valley, Belgium</p>
         </div>
     </div>
-
+-->
     <div class="step-block">
-        <div class="step" id="step-1945" data-globe-file="data/1945_co.csv" data-chart-file="data/regions_co2.csv" data-region="Japan" data-year = "1945">Year 1945</div>
+        <div class="step" id="step-1945" data-globe-file="data/1945_co.csv" data-chart-file="data/regions_co2.csv"data-globe-file-after="data/1945_co_after.csv" data-region="Japan" data-year = "1945">Year 1945</div>
         <div class="chart" id="chart-1945"></div>
         <div class="textbox">
             <p>The atomic bomb on Japan is a unique event in which destruction was brought about not 
@@ -145,7 +150,7 @@
     </div>
 
     <div class="step-block">
-        <div class="step" id="step-1952" data-globe-file="data/1952_co.csv" data-chart-file="data/regions_co2.csv" data-region="United Kingdom" data-year = "1952">Year 1952</div>
+        <div class="step" id="step-1952" data-globe-file="data/1952_co.csv" data-chart-file="data/regions_co2.csv" data-globe-file-after="data/1952_co_after.csv" data-region="United Kingdom" data-year = "1952">Year 1952</div>
         <div class="chart" id="chart-1952"></div>
         <div class="textbox">
             <p>In December 1952, London was engulfed for five days by the Great Smog, 
@@ -162,7 +167,7 @@
     </div>
 
     <div class="step-block">
-        <div class="step" id="step-1955" data-globe-file="data/1955_co.csv" data-chart-file="data/regions_co2.csv" data-region="Vietnam" data-year = "1955">Year 1955</div>
+        <div class="step" id="step-1955" data-globe-file="data/1955_co.csv" data-chart-file="data/regions_co2.csv" data-globe-file-after="data/1955_co_after.csv" data-region="Vietnam" data-year = "1955">Year 1955</div>
         <div class="chart" id="chart-20955"></div>
         <div class="textbox">
             <p>The vietnam war grew from the long conflicts between France and Vietnam. 
@@ -177,15 +182,15 @@
               cover and with it the carbon it stored was released.  </p>
         </div>
     </div>
-
-    <div class="step-block">
+<!--
+   <div class="step-block"> 
         <div class="step" id="step-2014" data-globe-file="data/2014_co.csv" data-chart-file="data/regions_co2.csv" data-region="Africa" data-year = "2014">Year 2014</div>
         <div class="chart" id="chart-2014"></div>
         <div class="textbox">
             <p>Text for 2014...</p>
         </div>
     </div>
-
+-->
 <div class="conclusion-cta">
   <button id="conclusion-btn" class="intro-btn">
     View Conclusion
@@ -200,7 +205,7 @@
   <div class = "outro-card">
     <span class = "intro-label">Looking ahead</span>
       <h2 class = "outro-title">
-        What can we learn from the past to help with our future.
+        What can we learn from the past to help with our future
       </h2>
       <p class = "outro-body">
         Conclusion...

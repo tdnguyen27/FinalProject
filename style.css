@@ -373,17 +373,8 @@ body.cinematic-mode .content-area {
 }
 
 
-.ghost-step {
-  height: 100vh;
-  margin-bottom: 0;
-  opacity: 0;            
-  pointer-events: none;
-}
-.ghost-step .step {
-    min-height: 100vh;
-}
 .step-block:not(.ghost-step):first-of-type {
-  margin-top: 60px;  /* tweak as you like */
+  margin-top: 30px;  /* tweak as you like */
 }
 .chart {
   height: 260px;
@@ -970,4 +961,112 @@ body.race-expanded #race-panel-inner {
   .conclusion-globe-panel {
     order: -1;
   }
+}
+
+
+
+
+.year-toggle {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+
+  display: none;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.6);
+
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+/* Visible only in story steps that support the toggle */
+.year-toggle.visible {
+  display: flex;            
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+
+/* Hide during cinematic intro/warp */
+body.cinematic-mode .year-toggle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.year-toggle-option {
+  position: relative;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+
+  font-family: var(--font-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+
+  background: transparent;
+  color: #e5e7eb;
+  opacity: 0.65; /* inactive slightly faded */
+
+  transition:
+    background-position 220ms ease-out,
+    box-shadow 160ms ease-out,
+    transform 140ms ease-out,
+    color 160ms ease-out,
+    background-color 160ms ease-out,
+    opacity 160ms ease-out;
+}
+
+/* Active pill: gradient + full opacity */
+.year-toggle-option.active {
+  background-image: linear-gradient(135deg, #36c8e4, #3ddad7);
+  background-size: 180% 180%;
+  background-position: 0% 50%;
+  color: #0f172a;
+  opacity: 1;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.28);
+}
+
+.year-toggle-option.active:hover {
+  transform: translateY(-1px);
+  background-position: 100% 50%;
+}
+
+.year-toggle-option:not(.active):hover {
+  background-color: rgba(148, 163, 184, 0.25);
+  opacity: 0.9;
+}
+
+@keyframes toggleGlowPulse {
+  0% {
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.6);
+    border-color: rgba(148, 163, 184, 0.7);
+  }
+  40% {
+    box-shadow:
+      0 0 0 0 rgba(56, 189, 248, 0.35),
+      0 26px 60px rgba(15, 23, 42, 0.8);
+    border-color: rgba(56, 189, 248, 0.9);
+  }
+  100% {
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.6);
+    border-color: rgba(148, 163, 184, 0.7);
+  }
+}
+
+.year-toggle.glow-pulse {
+  animation: toggleGlowPulse 480ms ease-out;
 }
