@@ -1364,7 +1364,6 @@ body.cinematic-mode .year-toggle {
   background: transparent;
 }
 
-/* Drop cap styling for the first paragraph of each newspaper page */
 .lead-paragraph::first-letter {
   float: left;
   font-family: var(--font-primary); /* Playfair Display */
@@ -1392,7 +1391,6 @@ body.cinematic-mode .year-toggle {
 .newspaper-sheet {
   position: relative;
 
-  /* 1. TEXTURE & PAPER COLOR (The new texture) */
   background: 
     /* Vignette shadow on edges */
     radial-gradient(circle at center, transparent 40%, rgba(15, 23, 42, 0.08) 100%),
@@ -1403,26 +1401,25 @@ body.cinematic-mode .year-toggle {
       transparent 1px,
       rgba(0,0,0,0.03) 2px
     ),
-    /* Base color */
     #f7f1e1;
 
-  /* 2. EDGES & DEPTH (Restoring the crisp lines) */
   border: 1px solid #d4cfc1;
-  border-radius: 3px; /* Slight roundness, but mostly sharp like paper */
+  border-radius: 2px;
 
-  /* Combined Shadow: Strong Drop Shadow + Inner Vignette */
   box-shadow: 
-    0 24px 50px rgba(15, 23, 42, 0.35),    /* The deep shadow behind the paper */
-    inset 0 0 40px rgba(15, 23, 42, 0.05);  /* Inner shadow to fake curvature */
+    1px 2px 0 #b3aba0, 
+    2px 3px 0 #b3aba0, 
+    3px 4px 0 #b3aba0, 
+    
+    0 24px 50px rgba(15, 23, 42, 0.4),
+    inset 0 0 40px rgba(15, 23, 42, 0.05); 
 
-  /* 3. LAYOUT (Your original layout) */
   padding: 22px 32px 18px 40px;
   max-width: 720px;
   margin-left: auto;
   margin-right: 0;
   overflow: hidden;
 
-  /* 4. 3D ANIMATION SETUP */
   transform-style: preserve-3d;
   transform-origin: left center;
   transform: rotateY(-3deg);
